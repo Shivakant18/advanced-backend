@@ -371,6 +371,88 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 
 })
 
+// get user channel profile of other users.
+// pipline me use hota hai isliye humne isko yha lgaya hai.
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+
+  const { username } = req.params
+  if (!username?.trim()) {
+    throw new ApiError(400, "Username is required")
+  }
+
+  const channel = await User.aggregate([
+    {
+      $match: {
+        username: username.toLowerCase()
+      }
+    },
+    {
+      $lookup: { //connt kiya ke kisi ne is channel ko subscribe kitne hai y likha hai hai isliye agr [] lgaya h 
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers"
+      }
+
+    },
+    {
+      $lookup: { //connt kiya ke is user ne kitne channal ko subscribe kiya hai isliye agr [] lgaya h 
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo"
+      }
+
+    },
+    {
+      $addFields: { //original k andar 2 - 3 field add krni ho to iska use krte hai 
+        subscribersCount: {
+          $size: "$subscribers"
+        },
+        subscribedToCount: {
+          $size: "$subscribedTo"
+        },
+        isSubscribed: {
+          $cond: {
+            if: { // true ho to user ne is channel ko subscribe kiya hai
+              $in: [req.user?._id, "$subscribers._id"]
+            },
+            then: true, // true ho to user ne is channel ko subscribe kiya hai
+            else: false // false 
+          }
+        }
+      }
+    },
+    {
+      $project: { // orignal ke andar se jo jo field ko remove krna hai unko yha likhte hai 1 mtlb usko rkna 0 mtlb usko hata dena 
+        fullName: 1,
+        username: 1,
+        avatar: 1,
+        coverImage: 1,
+        email: 1,
+        subscribersCount: 1,
+        channelSubscribedToCount: 1,
+        isSubscribed: 1
+      }
+    }
+
+
+  ])
+
+  if (!channel?.length) {
+    throw new ApiError(404, "Channel not found")
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, channel, "Channel fetched successfully")
+    )
+
+
+})
+
+
 
 export {
   registerUser,
@@ -381,7 +463,9 @@ export {
   getCurrentUser,
   updateAccountDetails,
   updateUserAvatar,
-  updateUserCoverImage
+  updateUserCoverImage,
+  getUserChannelProfile
+
 
 }
 
